@@ -1,0 +1,5 @@
+src/*.o
+oursql
+data/*
+*.tbl
+*.meta
