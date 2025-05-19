@@ -1,102 +1,83 @@
 #include "MetaManager.h"
+#include "Globals.h"
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-
-#include <cstring>
-#include <cctype>
+#include <stdexcept>
 #include <sstream>
-#include <iostream>
+#include <cstring>
 
+MetaManager::MetaManager(const std::string &table_path)
+    : dirPath_(table_path),
+      filePath_(table_path + "/metadata.meta"),
+      page_size_(PAGE_SIZE) {}
 
-namespace OurSQL {
+void MetaManager::save() const {
+    int fd = open(filePath_.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0) throw std::runtime_error("Cannot open metadata.meta for writing");
 
-void trim(std::string& s) {
-    size_t b = s.find_first_not_of(" \t\r\n");
-    size_t e = s.find_last_not_of(" \t\r\n");
-    if (b == std::string::npos) { s.clear(); }
-    else { s = s.substr(b, e - b + 1); }
-}
-
-ColumnType MetaManager::parseType(const std::string& s) const {
-    if (s == "INTEGER") return ColumnType::INTEGER;
-    if (s == "FLOAT")   return ColumnType::FLOAT;
-    if (s == "TEXT")    return ColumnType::TEXT;
-    return ColumnType::TEXT;
-}
-
-MetaManager::MetaManager(const std::string& dbPath)
-    : m_metaDir(dbPath + "/data/") {}
-
-
-bool MetaManager::loadSchema(const std::string& table) {
-    const std::string path = m_metaDir + table + ".meta";
-
-    int fd = ::open(path.c_str(), O_RDONLY);
-    if (fd < 0) return false;
-
-    struct stat st; // for getting file size
-    if (fstat(fd, &st) != 0) {
-        ::close(fd);
-        std::cerr << "Error: Failed to read file stats." << std::endl;
-        return false;
+    std::ostringstream oss;
+    oss << "table_name=" << table_name_ << std::endl;
+    oss << "page_size=" << page_size_ << std::endl;
+    for (const auto &c : columns_) {
+        oss << "column=" << c.name << ":" << DataTypeToStr(c.type) << std::endl;
     }
 
-    std::string content;
-    content.resize(st.st_size);
+    std::string data = oss.str();
+    ssize_t written = write(fd, data.data(), data.size());
+    if (written != static_cast<ssize_t>(data.size())) {
+        close(fd);
+        throw std::runtime_error("Failed to write metadata.meta");
+    }
+    fsync(fd);
+    close(fd);
+}
 
-    ssize_t rd = ::read(fd, content.data(), st.st_size);
-    ::close(fd);
+void MetaManager::load() {
+    int fd = open(filePath_.c_str(), O_RDONLY);
+    if (fd < 0) throw std::runtime_error("Cannot open metadata.meta for reading");
 
-    if (rd != st.st_size) return false; // read not enough data?
+    struct stat st;
+    if (fstat(fd, &st) < 0) {
+        close(fd);
+        throw std::runtime_error("fstat failed");
+    }
 
-    TableSchema schema;
-    schema.tableName = table;
+    std::vector<char> buf(st.st_size);
+    ssize_t r = read(fd, buf.data(), st.st_size);
+    if (r != static_cast<ssize_t>(st.st_size)) {
+        close(fd);
+        throw std::runtime_error("Failed to read metadata.meta");
+    }
+    close(fd);
 
-    std::istringstream instr(content);
+    std::istringstream iss(std::string(buf.data(), buf.size()));
     std::string line;
-    while (std::getline(instr, line)) {
-        trim(line);
-        if (line.empty() || line[0] == '#') continue;
+    columns_.clear();
 
-        std::istringstream parts(line);
-        std::string key;
-        parts >> key;
+    const char *key_table = "table_name=";
+    const char *key_size = "page_size=";
+    const char *key_col = "column=";
 
-        if (key == "TABLE") {
-            // already defined above
-        } else if (key == "COLUMNS") {
-            std::string colDef;
-            while (parts >> colDef) {
-                auto pos = colDef.find(':');
-                if (pos == std::string::npos) continue;
-                ColumnDef cd;
-                cd.name = colDef.substr(0, pos);
-                std::string t = colDef.substr(pos + 1);
-                cd.type = parseType(t);
-                schema.columns.push_back(std::move(cd));
-            }
-        } else if (key == "PRIMARY_KEY") {
-            parts >> schema.primaryKey;
-        } else if (key == "INDEX") {
-            std::string idx;
-            while (parts >> idx) {
-                schema.indices.push_back(idx);
+    while (std::getline(iss, line)) {
+        if (line.rfind(key_table, 0) == 0) {
+            table_name_ = line.substr(strlen(key_table));
+        } else if (line.rfind(key_size, 0) == 0) {
+            page_size_ = static_cast<unsigned int>(std::stoul(line.substr(strlen(key_size))));
+        } else if (line.rfind(key_col, 0) == 0) {
+            auto kv = line.substr(strlen(key_col));
+            auto pos = kv.find(':');
+            if (pos != std::string::npos) {
+                columns_.push_back({kv.substr(0, pos), StrToDataType(kv.substr(pos + 1))});
             }
         }
-        // ignore other keys
     }
+}
 
-    m_schemas.emplace(table, std::move(schema));
-    return true;
-};
+const std::string& MetaManager::tableName() const { return table_name_; }
+unsigned int MetaManager::pageSize() const { return page_size_; }
+const std::vector<ColumnInfo>& MetaManager::columns() const { return columns_; }
 
-const TableSchema* MetaManager::getSchema(const std::string& table) const {
-    auto it = m_schemas.find(table);
-    if (it == m_schemas.end()) return nullptr;
-    return &it->second;
-};
-
-
-} // namespace OurSQL
+void MetaManager::setTableName(const std::string &name) { table_name_ = name; }
+void MetaManager::setPageSize(unsigned int size) { page_size_ = size; }
+void MetaManager::addColumn(const ColumnInfo &col) { columns_.push_back(col); }
