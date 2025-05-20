@@ -5,7 +5,7 @@ LDFLAGS =
 TARGET = run_tests
 MAIN_TARGET = main
 
-all: $(TARGET) $(MAIN_TARGET)
+all: $(TARGET) $(MAIN_TARGET) client server
 
 FileManager.o: src/FileManager.cpp include/FileManager.h
 	$(CXX) $(CXXFLAGS) -c src/FileManager.cpp -o FileManager.o
@@ -21,15 +21,27 @@ QueryProcessor.o: src/QueryProcessor.cpp include/QueryProcessor.h
 	
 DatabaseManager.o: src/DatabaseManager.cpp include/DatabaseManager.h
 	$(CXX) $(CXXFLAGS) -c src/DatabaseManager.cpp -o DatabaseManager.o
+	
+client.o: src/client.cpp 
+	$(CXX) $(CXXFLAGS) -c src/client.cpp -o client.o
 
 Tests.o: tests/Tests.cpp include/FileManager.h include/MetaManager.h include/QueryProcessor.h include/DatabaseManager.h include/RecordManager.h include/ColumnInfo.h include/Globals.h
 	$(CXX) $(CXXFLAGS) -c tests/Tests.cpp -o Tests.o
+
+server.o: src/server.cpp include/FileManager.h include/MetaManager.h include/QueryProcessor.h include/DatabaseManager.h include/RecordManager.h include/ColumnInfo.h include/Globals.h
+	$(CXX) $(CXXFLAGS) -c src/server.cpp -o server.o
 
 Main.o: src/main.cpp include/FileManager.h include/MetaManager.h include/QueryProcessor.h include/DatabaseManager.h include/RecordManager.h include/ColumnInfo.h include/Globals.h
 	$(CXX) $(CXXFLAGS) -c src/main.cpp -o Main.o
 
 $(TARGET): FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Tests.o
 	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Tests.o -o $(TARGET)
+
+client: client.o
+	$(CXX) $(CXXFLAGS) client.o -o client
+
+server: FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o server.o
+	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o server.o -o server
 
 $(MAIN_TARGET): FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Main.o
 	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Main.o -o $(MAIN_TARGET)
