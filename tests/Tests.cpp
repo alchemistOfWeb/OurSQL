@@ -4,6 +4,7 @@
 #include "QueryProcessor.h"
 #include "Globals.h"
 #include "ColumnInfo.h"
+#include "DatabaseManager.h"
 #include <cassert>
 #include <fstream>
 #include <cstdio>
@@ -103,7 +104,7 @@ void testRecordManager() {
     auto vals2 = rm.deserialize(&page[recs2[1].offset], recs2[1].size);
     assert(vals2[2] == "Ivanov");
 
-    std::cout << "RecordManager tests passed" << std::endl;;
+    std::cout << "RecordManager tests passed" << std::endl;
 }
 
 void testQueryProcessor() {
@@ -136,7 +137,7 @@ void testQueryProcessor() {
     assert(q5.type == QueryType::CREATE);
     assert(q5.table == "users");
 
-    std::cout << "QueryProcessor tests passed\n";
+    std::cout << "QueryProcessor tests passed" << std::endl;
 }
 
 void testQueryProcessorExec() {
@@ -181,9 +182,56 @@ void testQueryProcessorExec() {
     unlink((dir + "/data.dat").c_str());
     unlink((dir + "/metadata.meta").c_str());
     rmdir(dir.c_str());
-    std::cout << "QueryProcessor::exec tests passed\n";
+    std::cout << "QueryProcessor::exec tests passed" << std::endl;
 }
 
+void testDatabaseManager() {
+
+    const std::string data_root = "./data";
+    mkdir(data_root.c_str(), 0755);
+
+    DatabaseManager db(data_root);
+
+    // CREATE TABLE
+    assert(db.exec("CREATE TABLE users (id INT, name CHAR, score FLOAT)"));
+
+    // INSERT
+    assert(db.exec("INSERT INTO users (id,name,score) VALUES (1, 'Petya', 4.5)"));
+    assert(db.exec("INSERT INTO users (id,name,score) VALUES (2, 'Masha', 3.7)"));
+    assert(db.exec("INSERT INTO users (id,name,score) VALUES (3, 'Kolya', 5.0)"));
+
+    // SELECT * FROM users
+    std::cout << "--- USERS TABLE ---\n";
+    assert(db.exec("SELECT * FROM users"));
+
+    // UPDATE (change score of Petya)
+    assert(db.exec("UPDATE users SET score = 4.9 WHERE name = 'Petya'"));
+    std::cout << "--- PETYA UPDATED ---\n";
+    assert(db.exec("SELECT id,score FROM users WHERE name = 'Petya'"));
+
+    // DELETE (delete Masha)
+    assert(db.exec("DELETE FROM users WHERE name = 'Masha'"));
+    std::cout << "--- AFTER DELETE MASHA ---\n";
+    assert(db.exec("SELECT * FROM users"));
+
+    // second table books and check independance
+    assert(db.exec("CREATE TABLE books (id INT, title CHAR)"));
+    assert(db.exec("INSERT INTO books (id,title) VALUES (1, 'War and Peace')"));
+    assert(db.exec("INSERT INTO books (id,title) VALUES (2, '1984')"));
+    std::cout << "--- BOOKS TABLE ---\n";
+    assert(db.exec("SELECT * FROM books"));
+
+    // Cleanup: 
+    unlink("./data/users/data.dat");
+    unlink("./data/users/metadata.meta");
+    rmdir("./data/users");
+    unlink("./data/books/data.dat");
+    unlink("./data/books/metadata.meta");
+    rmdir("./data/books");
+    rmdir("./data");
+
+    std::cout << "DatabaseManager tests passed" << std::endl;
+}
 
 int main() {
     mkdir("data/", 0755);
@@ -192,6 +240,7 @@ int main() {
     testRecordManager();
     testQueryProcessor();
     testQueryProcessorExec();
+    testDatabaseManager();
     std::cout << "All tests passed" << std::endl;
     return 0;
 }

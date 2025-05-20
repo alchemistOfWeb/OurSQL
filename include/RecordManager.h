@@ -28,7 +28,7 @@ public:
     bool updateRecord(std::vector<char>& page, uint16_t record_id, const std::vector<std::string>& values);
 
     
-    static constexpr size_t PAGE_HEADER_SIZE = 8; // 2 байта used_records + 2 байта total_records + 2*max_records offsets + max_records флагов
+    static constexpr size_t PAGE_HEADER_SIZE = 8; // 2 bites used_records + 2 bites total_records + 2*max_records offsets + max_records flags
     static constexpr size_t MAX_RECORDS_PER_PAGE = 128;
 
 private:
