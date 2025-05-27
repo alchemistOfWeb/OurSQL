@@ -17,7 +17,7 @@ RecordManager::RecordManager(const std::vector<ColumnInfo>& columns)
     : columns_(columns) {}
 
 size_t RecordManager::recordDataSize(const std::vector<std::string>& values) const {
-    size_t sz = 2; // id
+    size_t sz = 2; // reserved for id
     for (size_t i = 0; i < columns_.size(); ++i) {
         if (columns_[i].type == DataType::INT) {
             sz += sizeof(int32_t);
@@ -44,19 +44,26 @@ std::vector<char> RecordManager::serialize(const std::vector<std::string>& value
     memcpy(buf.data(), &rid, 2);
     p += 2;
     for (size_t i = 0; i < columns_.size(); ++i) {
-        if (columns_[i].type == DataType::INT) {
-            int32_t v = std::stoi(values[i]);
-            memcpy(buf.data() + p, &v, sizeof(int32_t));
-            p += sizeof(int32_t);
-        } else if (columns_[i].type == DataType::FLOAT) {
-            float v = std::stof(values[i]);
-            memcpy(buf.data() + p, &v, sizeof(float));
-            p += sizeof(float);
-        } else if (columns_[i].type == DataType::CHAR) {
-            uint8_t len = std::min<uint8_t>(values[i].size(), 127);
-            memcpy(buf.data() + p, &len, 1); ++p;
-            memcpy(buf.data() + p, values[i].c_str(), len);
-            p += 127;
+        if (values[i].empty() || values[i] == "NULL") {
+            buf[p++] = 0; // null
+            p += size_of_field(columns_[i].type); // skip space
+            // continue;
+        } else {
+            buf[p++] = 1; // not null
+            if (columns_[i].type == DataType::INT) {
+                int32_t v = std::stoi(values[i]);
+                memcpy(buf.data() + p, &v, sizeof(int32_t));
+                p += sizeof(int32_t);
+            } else if (columns_[i].type == DataType::FLOAT) {
+                float v = std::stof(values[i]);
+                memcpy(buf.data() + p, &v, sizeof(float));
+                p += sizeof(float);
+            } else if (columns_[i].type == DataType::CHAR) {
+                uint8_t len = std::min<uint8_t>(values[i].size(), 127);
+                memcpy(buf.data() + p, &len, 1); ++p;
+                memcpy(buf.data() + p, values[i].c_str(), len);
+                p += 127;
+            }
         }
     }
     return buf;
@@ -66,21 +73,28 @@ std::vector<std::string> RecordManager::deserialize(const char* data, size_t siz
     std::vector<std::string> result;
     size_t p = 2; // skip id
     for (size_t i = 0; i < columns_.size(); ++i) {
-        if (columns_[i].type == DataType::INT) {
-            int32_t v = 0;
-            memcpy(&v, data + p, sizeof(int32_t));
-            p += sizeof(int32_t);
-            result.push_back(std::to_string(v));
-        } else if (columns_[i].type == DataType::FLOAT) {
-            float v = 0;
-            memcpy(&v, data + p, sizeof(float));
-            p += sizeof(float);
-            result.push_back(std::to_string(v));
-        } else if (columns_[i].type == DataType::CHAR) {
-            uint8_t len = data[p]; ++p;
-            std::string s(data + p, data + p + len);
-            result.push_back(s);
-            p += 127;
+        bool not_null = data[p++];
+        if (!not_null) {
+            result.push_back("NULL");
+            p += size_of_field(columns_[i].type);
+            // continue;
+        } else {
+            if (columns_[i].type == DataType::INT) {
+                int32_t v = 0;
+                memcpy(&v, data + p, sizeof(int32_t));
+                p += sizeof(int32_t);
+                result.push_back(std::to_string(v));
+            } else if (columns_[i].type == DataType::FLOAT) {
+                float v = 0;
+                memcpy(&v, data + p, sizeof(float));
+                p += sizeof(float);
+                result.push_back(std::to_string(v));
+            } else if (columns_[i].type == DataType::CHAR) {
+                uint8_t len = data[p]; ++p;
+                std::string s(data + p, data + p + len);
+                result.push_back(s);
+                p += 127;
+            }
         }
     }
     return result;
@@ -123,7 +137,18 @@ bool RecordManager::insertRecord(std::vector<char>& page, const std::vector<std:
 
     // id
     out_id = slot;
-    std::vector<char> rec = serialize(values);
+    std::vector<std::string> applied_values = values;
+    for (size_t i = 0; i < columns_.size(); ++i) {
+        if (applied_values[i].empty() || applied_values[i] == "NULL") {
+            if (columns_[i].default_value) {
+                applied_values[i] = columns_[i].default_value.value();
+            } else if (!columns_[i].nullable) {
+                throw std::runtime_error("Column '" + columns_[i].name + "' is NOT NULL but no value/default specified");
+            }
+            // if nullable, leave "NULL" (or empty)
+        }
+    }
+    std::vector<char> rec = serialize(applied_values);
     memcpy(rec.data(), &out_id, 2);
 
     memcpy(page.data() + rec_pos, rec.data(), rec_size);
@@ -160,4 +185,14 @@ bool RecordManager::updateRecord(std::vector<char>& page, uint16_t record_id, co
     memcpy(rec.data(), &record_id, 2);
     memcpy(page.data() + rec_pos, rec.data(), rec_size);
     return true;
+}
+
+
+size_t RecordManager::size_of_field(DataType type) const {
+    switch (type) {
+        case DataType::INT: return sizeof(int32_t);
+        case DataType::FLOAT: return sizeof(float);
+        case DataType::CHAR: return 1 + 127; // 1 bite to store length + max 127
+        default: return 0;
+    }
 }

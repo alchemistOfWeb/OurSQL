@@ -11,25 +11,40 @@ void DatabaseManager::createTable(const Query& q) {
     MetaManager mm(dir);
     mm.setTableName(q.table);
     mm.setPageSize(4096); 
+
     // parse cols (name type, ...)
     auto cols_def = q.raw_sql.substr(q.raw_sql.find('(') + 1);
     cols_def = cols_def.substr(0, cols_def.find(')'));
     std::vector<std::string> tokens;
     std::istringstream iss(cols_def);
     std::string token;
+
     while (std::getline(iss, token, ',')) {
         // divide name and type
         std::istringstream tkn(token);
-        std::string cname, ctype;
+        std::string cname, ctype, word, defval;
+        bool nullable = true;
+        std::optional<std::string> def_value = std::nullopt;
         tkn >> cname >> ctype;
+        while (tkn >> word) {
+            if (word == "NOT") {
+                std::string next;
+                tkn >> next;
+                if (next == "NULL") nullable = false;
+            } else if (word == "DEFAULT") {
+                tkn >> defval;
+                def_value = defval;
+            }
+        }
         std::transform(ctype.begin(), ctype.end(), ctype.begin(), ::toupper);
         DataType t;
         if (ctype == "INT") t = DataType::INT;
         else if (ctype == "FLOAT") t = DataType::FLOAT;
         else if (ctype == "CHAR") t = DataType::CHAR;
         else throw std::runtime_error("Unknown type: " + ctype);
-        mm.addColumn({cname, t});
+        mm.addColumn({cname, t, nullable, def_value});
     }
+
     mm.save();
     std::cout << "Table " << q.table << " created.\n";
     // init first empty page:

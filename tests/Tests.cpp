@@ -233,6 +233,21 @@ void testDatabaseManager() {
     std::cout << "DatabaseManager tests passed" << std::endl;
 }
 
+void testNullAndDefault() {
+    DatabaseManager db("./data");
+    assert(db.exec("CREATE TABLE test (id INT, name CHAR DEFAULT 'anon', score FLOAT)"));
+    assert(db.exec("INSERT INTO test (id,score) VALUES (1, 2.2)"));
+    assert(db.exec("INSERT INTO test (id,name,score) VALUES (2,NULL,5.0)"));
+    assert(db.exec("SELECT * FROM test"));
+    // Expecting: name will be 'anon' and 'NULL'
+    // cleanup:
+    unlink("./data/test/data.dat");
+    unlink("./data/test/metadata.meta");
+    rmdir("./data/test");
+    rmdir("./data");
+    std::cout << "NULL/DEFAULT tests passed\n";
+}
+
 int main() {
     mkdir("data/", 0755);
     testFileManager();

@@ -3,3 +3,4 @@ oursql
 data/*
 *.tbl
 *.meta
+*.o

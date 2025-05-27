@@ -33,6 +33,7 @@ public:
 
 private:
     std::vector<ColumnInfo> columns_;
+    size_t size_of_field(DataType type) const;
     size_t recordDataSize(const std::vector<std::string>& values) const;
     size_t recordDataSize() const;
 };

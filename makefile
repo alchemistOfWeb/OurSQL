@@ -4,8 +4,10 @@ LDFLAGS =
 
 TARGET = run_tests
 MAIN_TARGET = main
+CLIENT_TARGET = client
+SERVER_TARGET = server
 
-all: $(TARGET) $(MAIN_TARGET) client server
+all: $(TARGET) $(MAIN_TARGET) $(CLIENT_TARGET) $(SERVER_TARGET)
 
 FileManager.o: src/FileManager.cpp include/FileManager.h
 	$(CXX) $(CXXFLAGS) -c src/FileManager.cpp -o FileManager.o
@@ -37,14 +39,14 @@ Main.o: src/main.cpp include/FileManager.h include/MetaManager.h include/QueryPr
 $(TARGET): FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Tests.o
 	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Tests.o -o $(TARGET)
 
-client: client.o
+$(CLIENT_TARGET): client.o
 	$(CXX) $(CXXFLAGS) client.o -o client
 
-server: FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o server.o
+$(SERVER_TARGET): FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o server.o
 	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o server.o -o server
 
 $(MAIN_TARGET): FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Main.o
 	$(CXX) $(CXXFLAGS) FileManager.o MetaManager.o QueryProcessor.o RecordManager.o DatabaseManager.o Main.o -o $(MAIN_TARGET)
 
 clean:
-	rm -f *.o $(TARGET) $(MAIN_TARGET)
+	rm -f *.o $(TARGET) $(MAIN_TARGET) $(CLIENT_TARGET) $(SERVER_TARGET)

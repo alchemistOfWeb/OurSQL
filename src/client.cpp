@@ -6,7 +6,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
-const int PORT = 8888;
+#define PORT 8888
+#define PAGE_SIZE 4096
 
 int main() {
     int sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -21,15 +22,15 @@ int main() {
     addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
     if (connect(sock, (sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("connect");
         close(sock);
-        return 2;
+        perror("connection failure");
+        exit(EXIT_FAILURE);
     }
 
     std::cout << "Connected to OurSQLDB server at 127.0.0.1:" << PORT << "\n";
     std::cout << "Type SQL and press Enter. Type EXIT to quit.\n";
 
-    char buffer[8192];
+    char buffer[PAGE_SIZE];
     while (true) {
         std::cout << "> ";
         std::string line;
@@ -37,10 +38,10 @@ int main() {
         line += '\n';
 
         if (send(sock, line.c_str(), line.size(), 0) < 0) {
-            perror("send");
+            perror("sending message failure");
             break;
         }
-        if (line == "EXIT\n" || line == "exit\n") break;
+        if (line == "EXIT\n" || line == "exit\n" || line == "quit\n" || line == "QUIT\n") break;
 
         ssize_t n = recv(sock, buffer, sizeof(buffer) - 1, 0);
         if (n <= 0) {

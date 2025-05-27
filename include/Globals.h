@@ -28,3 +28,4 @@ inline DataType StrToDataType(const std::string& str) {
     if (str == "CHAR") return DataType::CHAR;
     throw std::invalid_argument("Unknown DataType: " + str);
 }
+
